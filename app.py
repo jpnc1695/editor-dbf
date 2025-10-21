@@ -7,7 +7,7 @@ from collections import Counter
 app = Flask(__name__)
 
 # Configuração para produção
-app.secret_key = os.environ.get('SECRET_KEY', 'fallback-key-for-railway')
+app.secret_key = os.environ.get('SECRET_KEY')
 
 # Configurações
 app.config['UPLOAD_FOLDER'] = 'uploads'
