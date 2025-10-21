@@ -6,15 +6,29 @@ from collections import Counter
 
 app = Flask(__name__)
 
-# Configuração para produção
+# 🔒 CONFIGURAÇÃO PARA PRODUÇÃO (RAILWAY)
+# Remove qualquer referência ao .env e usa apenas variáveis de ambiente
 app.secret_key = os.environ.get('SECRET_KEY')
 
-# Configurações
+# Verifica se a SECRET_KEY foi configurada corretamente
+if not app.secret_key:
+    print("❌ ERRO: SECRET_KEY não encontrada nas variáveis de ambiente!")
+    print("💡 No Railway, vá em Variables → Add SECRET_KEY")
+    # Fallback apenas para evitar crash, mas NÃO USE EM PRODUÇÃO
+    app.secret_key = 'fallback-temporary-key-railway-' + os.urandom(16).hex()
+
+# Configurações do Flask
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
 # Criar pasta de uploads se não existir
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# Log para verificar se a SECRET_KEY foi carregada
+print(f"🔑 SECRET_KEY configurada: {'✅ SIM' if app.secret_key and app.secret_key.startswith('ac883') else '❌ NÃO'}")
+print(f"🌐 Ambiente: {'🚀 PRODUÇÃO' if 'RAILWAY' in os.environ else '💻 DESENVOLVIMENTO'}")
+
+# ... (o resto do seu código permanece igual) ...
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'dbf'
@@ -54,17 +68,16 @@ def read_dbf_file(file_path):
             except Exception as e:
                 continue
         
-        return None, None, "Não foi possível ler o arquivo"
+        return None, None, "Não foi possível ler o arquivo com nenhuma codificação"
         
     except Exception as e:
-        return None, None, f"Erro ao processar arquivo: {str(e)}"
+        return None, None, f"Erro ao processar arquivo DBF: {str(e)}"
 
 def encontrar_duplicados(data, coluna_chave='CD_MUN'):
     """Encontra registros duplicados"""
     if not data or not coluna_chave:
         return []
     
-    from collections import Counter
     contador = Counter()
     for registro in data:
         chave = registro.get(coluna_chave)
@@ -199,5 +212,6 @@ def limpar_sessao():
     return redirect('/')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    port = int(os.environ.get('PORT', 8000))
+    debug = os.environ.get('FLASK_ENV') == 'development'
+    app.run(host='0.0.0.0', port=port, debug=debug)
