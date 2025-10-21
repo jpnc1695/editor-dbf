@@ -1,11 +1,12 @@
 import os
+from dotenv import load_dotenv
 from flask import Flask, render_template, request, flash, session, redirect
 from dbfread import DBF
 from werkzeug.utils import secure_filename
 from collections import Counter
-
+load_dotenv()
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'chave-secreta-padrao')
+app.secret_key = os.environ.get('SECRET_KEY')
 
 # Configurações
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
