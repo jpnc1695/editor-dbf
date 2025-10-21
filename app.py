@@ -1,6 +1,6 @@
 import os
 from flask import Flask, render_template, request, flash
-import dbf
+from dbfread import DBF, DBFNotFound
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -12,52 +12,74 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() == 'dbf'
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'dbf'
 
 def read_dbf_file(file_path):
-    """Lê arquivo DBF e retorna os dados sem usar pandas"""
+    """Lê arquivo DBF usando dbfread (mais confiável)"""
     try:
-        table = dbf.Table(file_path)
-        table.open()
+        # Verifica se o arquivo existe
+        if not os.path.exists(file_path):
+            return None, None, "Arquivo não encontrado"
         
-        # Lê todos os registros
-        data = []
-        for record in table:
-            # Converte o registro para dicionário
-            record_dict = {}
-            for field_name in record._field_names:
-                record_dict[field_name] = record[field_name]
-            data.append(record_dict)
+        # Tenta ler com diferentes codificações
+        encodings = ['latin-1', 'utf-8', 'cp1252', 'iso-8859-1']
         
-        # Obtém os nomes das colunas da estrutura da tabela
-        columns = [field.name for field in table.structure()]
+        for encoding in encodings:
+            try:
+                table = DBF(file_path, encoding=encoding, char_decode_errors='ignore')
+                
+                # Obtém colunas
+                columns = [field.name for field in table.fields]
+                
+                # Lê dados (limita a 1000 registros para performance)
+                data = []
+                for i, record in enumerate(table):
+                    data.append(dict(record))
+                    if i >= 1000:  # Limite para performance
+                        break
+                
+                return data, columns, None
+                
+            except UnicodeDecodeError:
+                continue  # Tenta próxima codificação
+            except Exception as e:
+                continue  # Tenta próxima codificação
         
-        table.close()
-        
-        return data, columns, None
+        return None, None, "Não foi possível ler o arquivo com nenhuma codificação"
         
     except Exception as e:
-        return None, None, str(e)
+        return None, None, f"Erro ao processar arquivo DBF: {str(e)}"
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     data = None
-    columns = []
+    columns = None
     filename = None
+    record_count = 0
+    column_count = 0
     
     if request.method == 'POST':
         # Verifica se o arquivo foi enviado
         if 'file' not in request.files:
             flash('Nenhum arquivo selecionado', 'error')
-            return render_template('index.html', data=data, columns=columns, filename=filename)
+            return render_template('index.html', 
+                                 data=data, 
+                                 columns=columns, 
+                                 filename=filename,
+                                 record_count=record_count,
+                                 column_count=column_count)
         
         file = request.files['file']
         
         # Verifica se o arquivo tem nome
         if file.filename == '':
             flash('Nenhum arquivo selecionado', 'error')
-            return render_template('index.html', data=data, columns=columns, filename=filename)
+            return render_template('index.html', 
+                                 data=data, 
+                                 columns=columns, 
+                                 filename=filename,
+                                 record_count=record_count,
+                                 column_count=column_count)
         
         # Verifica se é um arquivo DBF
         if file and allowed_file(file.filename):
@@ -73,9 +95,13 @@ def index():
                 
                 if error:
                     flash(f'Erro ao ler arquivo: {error}', 'error')
-                else:
+                elif data is not None and columns is not None:
+                    record_count = len(data)
+                    column_count = len(columns)
                     flash(f'Arquivo {filename} carregado com sucesso! '
-                          f'({len(data)} registros, {len(columns)} colunas)', 'success')
+                          f'({record_count} registros, {column_count} colunas)', 'success')
+                else:
+                    flash('Não foi possível ler os dados do arquivo', 'error')
                 
                 # Remove o arquivo temporário
                 if os.path.exists(file_path):
@@ -89,7 +115,12 @@ def index():
         else:
             flash('Por favor, selecione um arquivo .dbf', 'error')
     
-    return render_template('index.html', data=data, columns=columns, filename=filename)
+    return render_template('index.html', 
+                         data=data, 
+                         columns=columns, 
+                         filename=filename,
+                         record_count=record_count,
+                         column_count=column_count)
 
 if __name__ == '__main__':
     app.run(debug=True)
