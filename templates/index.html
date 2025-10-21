@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador DBF</title>
+    <title>Visualizador DBF - Filtro de Duplicados</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
@@ -32,6 +32,9 @@
         .alert {
             border-radius: 8px;
         }
+        .duplicate-row {
+            background-color: #fff3cd !important;
+        }
     </style>
 </head>
 <body>
@@ -39,17 +42,27 @@
         <div class="row">
             <div class="col-12">
                 <h1 class="text-center mb-4">📊 Visualizador de Arquivos DBF</h1>
+                <p class="text-center text-muted mb-4">Com filtro de registros duplicados</p>
                 
                 <!-- Card de Upload -->
                 <div class="card shadow">
                     <div class="card-body">
-                        <h5 class="card-title">📤 Upload do Arquivo</h5>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0">📤 Upload do Arquivo</h5>
+                            {% if filename %}
+                            <form method="post" action="/limpar">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                    🗑️ Limpar Sessão
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
                         
                         <!-- Mensagens -->
                         {% with messages = get_flashed_messages(with_categories=true) %}
                             {% if messages %}
                                 {% for category, message in messages %}
-                                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show">
+                                    <div class="alert alert-{{ 'danger' if category == 'error' else 'info' if category == 'info' else 'success' }} alert-dismissible fade show">
                                         {{ message }}
                                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                                     </div>
@@ -57,7 +70,7 @@
                             {% endif %}
                         {% endwith %}
 
-                        <!-- Formulário -->
+                        <!-- Formulário de Upload -->
                         <form method="post" enctype="multipart/form-data">
                             <div class="mb-3">
                                 <label for="file" class="form-label">Selecione um arquivo .dbf:</label>
@@ -68,19 +81,73 @@
                     </div>
                 </div>
 
+                <!-- Controles de Filtro -->
+                {% if filename %}
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h5 class="card-title">🔍 Filtros</h5>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <form method="post" class="mb-3">
+                                    <div class="mb-3">
+                                        <label for="coluna_filtro" class="form-label">Coluna para verificar duplicatas:</label>
+                                        <select class="form-select" name="coluna_filtro" id="coluna_filtro">
+                                            {% for column in columns %}
+                                                {% if column != '_CONTAGEM_DUPLICATAS' %}
+                                                <option value="{{ column }}" {% if column == coluna_filtro %}selected{% endif %}>
+                                                    {{ column }}
+                                                </option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <button type="submit" name="mostrar_duplicados" class="btn btn-warning">
+                                        🎯 Mostrar Apenas Duplicados
+                                    </button>
+                                </form>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <form method="post">
+                                    <button type="submit" name="mostrar_todos" class="btn btn-secondary mt-4">
+                                        📋 Mostrar Todos os Registros
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Informações do Arquivo -->
                 {% if filename %}
                 <div class="card bg-light">
                     <div class="card-body">
                         <div class="row text-center">
-                            <div class="col-md-4">
-                                <strong>Arquivo:</strong><br>{{ filename }}
+                            <div class="col-md-3">
+                                <strong>Arquivo:</strong><br>
+                                <span class="text-primary">{{ filename }}</span>
                             </div>
-                            <div class="col-md-4">
-                                <strong>Registros:</strong><br>{{ record_count }}
+                            <div class="col-md-2">
+                                <strong>Registros:</strong><br>
+                                <span class="badge bg-primary">{{ record_count }}</span>
                             </div>
-                            <div class="col-md-4">
-                                <strong>Colunas:</strong><br>{{ column_count }}
+                            <div class="col-md-2">
+                                <strong>Colunas:</strong><br>
+                                <span class="badge bg-success">{{ column_count }}</span>
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Coluna de Filtro:</strong><br>
+                                <span class="badge bg-info">{{ coluna_filtro }}</span>
+                            </div>
+                            <div class="col-md-2">
+                                <strong>Modo:</strong><br>
+                                {% if mostrar_duplicados %}
+                                <span class="badge bg-warning">Apenas Duplicados</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Todos os Registros</span>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -90,8 +157,21 @@
                 <!-- Tabela de Dados -->
                 {% if data and columns %}
                 <div class="card shadow">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">📋 Dados do Arquivo</h5>
+                    <div class="card-header {% if mostrar_duplicados %}bg-warning text-dark{% else %}bg-primary text-white{% endif %}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                {% if mostrar_duplicados %}
+                                🎯 Registros Duplicados ({{ record_count }} encontrados)
+                                {% else %}
+                                📋 Todos os Registros ({{ record_count }} no total)
+                                {% endif %}
+                            </h5>
+                            <small>
+                                {% if mostrar_duplicados %}
+                                Filtrado por: <strong>{{ coluna_filtro }}</strong>
+                                {% endif %}
+                            </small>
+                        </div>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -99,19 +179,30 @@
                                 <thead class="table-dark">
                                     <tr>
                                         {% for column in columns %}
-                                        <th>{{ column }}</th>
+                                        <th>
+                                            {{ column }}
+                                            {% if column == '_CONTAGEM_DUPLICATAS' %}
+                                            <br><small class="text-warning">(Contagem)</small>
+                                            {% elif column == coluna_filtro and mostrar_duplicados %}
+                                            <br><small class="text-warning">(Filtro)</small>
+                                            {% endif %}
+                                        </th>
                                         {% endfor %}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for row in data %}
-                                    <tr>
+                                    <tr class="{% if mostrar_duplicados %}duplicate-row{% endif %}">
                                         {% for column in columns %}
                                         <td>
                                             {% if row[column] is none or row[column] == '' %}
                                                 <span class="text-muted">-</span>
                                             {% else %}
                                                 {{ row[column] }}
+                                            {% endif %}
+                                            
+                                            {% if column == '_CONTAGEM_DUPLICATAS' and row[column] %}
+                                            <br><small class="text-warning">(Aparece {{ row[column] }} vezes)</small>
                                             {% endif %}
                                         </td>
                                         {% endfor %}
@@ -128,5 +219,18 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Adiciona confirmação para limpar sessão
+        document.addEventListener('DOMContentLoaded', function() {
+            const limparBtn = document.querySelector('form[action="/limpar"] button');
+            if (limparBtn) {
+                limparBtn.addEventListener('click', function(e) {
+                    if (!confirm('Tem certeza que deseja limpar a sessão? Todos os dados carregados serão perdidos.')) {
+                        e.preventDefault();
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>
