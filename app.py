@@ -1,5 +1,6 @@
 import os
 from flask import Flask, render_template, request, flash, session, redirect
+from flask_session import Session
 from dbfread import DBF, DBFNotFound
 from werkzeug.utils import secure_filename
 from collections import Counter
@@ -8,6 +9,12 @@ app = Flask(__name__)
 app.secret_key = 'chave_secreta_simples'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_FILE_DIR'] = './flask_session_files'
+app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_USE_SIGNER'] = True
+Session(app)
 
 # Criar pasta de uploads se não existir
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
